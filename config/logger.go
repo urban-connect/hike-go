@@ -2,7 +2,7 @@ package config
 
 import "go.uber.org/zap"
 
-func NewLogger(cfg *BaseConfig) (*zap.SugaredLogger, error) {
+func NewLogger(cfg BaseConfig) (*zap.SugaredLogger, error) {
 	var logger *zap.Logger
 	var err error
 

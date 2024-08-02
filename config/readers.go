@@ -1,9 +1,12 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/sethvargo/go-envconfig"
 )
 
 type Crypto interface {
@@ -19,6 +22,23 @@ type ReaderFunc func(cfg interface{}) error
 
 func (cf ReaderFunc) Read(cfg interface{}) error {
 	return cf(cfg)
+}
+
+func FromEnv(prefix string) ReaderFunc {
+	lookuper := envconfig.PrefixLookuper(prefix, UpcaseLookuper(envconfig.OsLookuper()))
+
+	return func(cfg interface{}) error {
+		ecfg := &envconfig.Config{
+			Target:   cfg,
+			Lookuper: lookuper,
+		}
+
+		if err := envconfig.ProcessWith(context.Background(), ecfg); err != nil {
+			return fmt.Errorf("failed to read configuration from environment: %w", err)
+		}
+
+		return nil
+	}
 }
 
 func FromFile(filename string, optional bool) ReaderFunc {

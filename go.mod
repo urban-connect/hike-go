@@ -7,4 +7,7 @@ require (
 	golang.org/x/crypto v0.25.0
 )
 
-require go.uber.org/multierr v1.10.0 // indirect
+require (
+	github.com/sethvargo/go-envconfig v1.1.0
+	go.uber.org/multierr v1.10.0 // indirect
+)
