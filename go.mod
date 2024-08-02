@@ -1,4 +1,4 @@
-module urban-connect.ch/hike
+module urban-connect.ch/hike-go
 
 go 1.22.0
 
