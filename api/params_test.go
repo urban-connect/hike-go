@@ -1,9 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +46,89 @@ func TestParseParamsSources(t *testing.T) {
 	assert.Equal(t, "Bearer secret", p.Token)
 	assert.Equal(t, 10, p.Limit)
 	assert.Equal(t, "widget", p.Name)
+}
+
+func TestParseParamsFormSource(t *testing.T) {
+	type params struct {
+		ID   string `params:"id,form"`
+		Turn string `params:"turn,form"`
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/device/relay/control",
+		strings.NewReader("id=abc123&turn=on"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var p params
+	require.NoError(t, ParseParams(r, &p))
+
+	assert.Equal(t, "abc123", p.ID)
+	assert.Equal(t, "on", p.Turn)
+}
+
+// TestParseParamsAppliesTransforms covers the full matrix of every param source
+// (path, query, header, form) against every transform (lowercase, uppercase).
+func TestParseParamsAppliesTransforms(t *testing.T) {
+	const raw = "MixedCase"
+
+	sources := []struct {
+		name   string
+		newReq func(key, value string) *http.Request
+	}{
+		{"path", func(key, value string) *http.Request {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.SetPathValue(key, value)
+			return r
+		}},
+		{"query", func(key, value string) *http.Request {
+			return httptest.NewRequest(http.MethodGet, "/?"+url.Values{key: {value}}.Encode(), nil)
+		}},
+		{"header", func(key, value string) *http.Request {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(key, value)
+			return r
+		}},
+		{"form", func(key, value string) *http.Request {
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(url.Values{key: {value}}.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			return r
+		}},
+	}
+
+	transforms := []struct {
+		name string
+		want string
+	}{
+		{"lowercase", "mixedcase"},
+		{"uppercase", "MIXEDCASE"},
+	}
+
+	for _, source := range sources {
+		for _, transform := range transforms {
+			t.Run(source.name+" "+transform.name, func(t *testing.T) {
+				structType := reflect.StructOf([]reflect.StructField{{
+					Name: "Field",
+					Type: reflect.TypeFor[string](),
+					Tag:  reflect.StructTag(fmt.Sprintf(`params:"field,%s" transform:"%s"`, source.name, transform.name)),
+				}})
+
+				out := reflect.New(structType)
+
+				require.NoError(t, ParseParams(source.newReq("field", raw), out.Interface()))
+				assert.Equal(t, transform.want, out.Elem().Field(0).String())
+			})
+		}
+	}
+
+	t.Run("leaves a field without a transform tag untouched", func(t *testing.T) {
+		var p struct {
+			Field string `params:"field,query"`
+		}
+
+		r := httptest.NewRequest(http.MethodGet, "/?field="+raw, nil)
+
+		require.NoError(t, ParseParams(r, &p))
+		assert.Equal(t, raw, p.Field)
+	})
 }
 
 func TestParseParamsKinds(t *testing.T) {

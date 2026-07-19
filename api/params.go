@@ -27,6 +27,8 @@ func ParseParams(r *http.Request, in any) error {
 			value = r.PathValue(options.Key)
 		} else if options.Source.Is(Header) {
 			value = r.Header.Get(options.Key)
+		} else if options.Source.Is(Form) {
+			value = r.PostFormValue(options.Key)
 		} else {
 			value = r.URL.Query().Get(options.Key)
 		}
@@ -82,7 +84,7 @@ func ParseParams(r *http.Request, in any) error {
 		}
 	}
 
-	return nil
+	return ApplyTransforms(in)
 }
 
 // Options contains options parsed from tag value
@@ -102,7 +104,7 @@ func (s Source) String() string {
 }
 
 func (s Source) Validate() error {
-	if s.Is(Path, Query, Header) {
+	if s.Is(Path, Query, Header, Form) {
 		return nil
 	}
 
@@ -113,6 +115,7 @@ const (
 	Path   Source = "path"
 	Query  Source = "query"
 	Header Source = "header"
+	Form   Source = "form"
 )
 
 var (
@@ -120,6 +123,7 @@ var (
 		Path.String(),
 		Query.String(),
 		Header.String(),
+		Form.String(),
 	}
 )
 
