@@ -84,14 +84,16 @@ err := crypto.NewToken(header).Validate(digest)
 
 ### `api` — request parameter binding
 
-`api.ParseParams` binds request data into a struct via `params:"key,source,transforms..."` tags, where
-`source` is `path`, `query` (the default), `header`, or `form`. Path values use `r.PathValue`, i.e. Go
-1.22 `net/http` routing patterns; form values use `r.PostFormValue`. Any parts after the source are
-value transforms applied in order before binding — currently `lowercase` and `uppercase`.
+`api.ParseParams` binds request data into a struct via `params:"key,source"` tags, where `source` is
+`path`, `query` (the default), `header`, or `form`. Path values use `r.PathValue`, i.e. Go 1.22
+`net/http` routing patterns; form values use `r.PostFormValue`.
+
+A separate, optional `transform` tag normalizes a string field's value after it is populated — a
+comma-separated list of transforms applied in order, currently `lowercase` and `uppercase`.
 
 ```go
 type Params struct {
-    ID    string `params:"id,path,lowercase"`
+    ID    string `params:"id,path" transform:"lowercase"`
     Token string `params:"authorization,header"`
     Limit int    `params:"limit,query"`
     Turn  string `params:"turn,form"`
@@ -99,6 +101,21 @@ type Params struct {
 
 var params Params
 if err := api.ParseParams(r, &params); err != nil {
+    // ...
+}
+```
+
+`api.ParsePayload` decodes a JSON request body and applies the same `transform` tags, so a payload can
+be normalized the same way params are. `api.ApplyTransforms` runs the transforms on an already-populated
+struct if you need it standalone.
+
+```go
+type Payload struct {
+    DeviceID string `json:"device_id" transform:"lowercase"`
+}
+
+var payload Payload
+if err := api.ParsePayload(r, &payload); err != nil {
     // ...
 }
 ```

@@ -37,10 +37,6 @@ func ParseParams(r *http.Request, in any) error {
 			continue
 		}
 
-		for _, transform := range options.Transforms {
-			value = transform.Apply(value)
-		}
-
 		fieldValue := inElem.Field(i)
 
 		switch kind := fieldValue.Kind(); kind {
@@ -88,14 +84,13 @@ func ParseParams(r *http.Request, in any) error {
 		}
 	}
 
-	return nil
+	return ApplyTransforms(in)
 }
 
 // Options contains options parsed from tag value
 type Options struct {
-	Key        string
-	Source     Source
-	Transforms []Transform
+	Key    string
+	Source Source
 }
 
 type Source string
@@ -132,8 +127,70 @@ var (
 	}
 )
 
-// Transform is a normalization applied to a parameter's string value after it
-// is read from the request and before it is bound to the target field.
+// ApplyTransforms normalizes the string fields of a struct according to their
+// `transform` tag (a comma-separated list of transforms applied in order),
+// e.g. `transform:"lowercase"`. It runs after a field has been populated, so it
+// works for values bound from request params as well as from a decoded JSON
+// body. Fields without a transform tag are left untouched; a transform tag on a
+// non-string field is an error.
+func ApplyTransforms(in any) error {
+	inElem := reflect.ValueOf(in).Elem()
+	inType := inElem.Type()
+
+	for i := 0; i < inType.NumField(); i++ {
+		field := inType.Field(i)
+
+		tag, ok := field.Tag.Lookup("transform")
+
+		if !ok {
+			continue
+		}
+
+		transforms, err := ParseTransforms(field.Name, tag)
+
+		if err != nil {
+			return err
+		}
+
+		fieldValue := inElem.Field(i)
+
+		if fieldValue.Kind() != reflect.String {
+			return fmt.Errorf("transform tag on field %s requires a string field, got %s", field.Name, fieldValue.Kind())
+		}
+
+		value := fieldValue.String()
+
+		for _, transform := range transforms {
+			value = transform.Apply(value)
+		}
+
+		fieldValue.SetString(value)
+	}
+
+	return nil
+}
+
+// ParseTransforms parses a `transform` tag value into a validated slice of
+// transforms, preserving their declared order.
+func ParseTransforms(fieldName string, tag string) ([]Transform, error) {
+	parts := strings.Split(tag, ",")
+	transforms := make([]Transform, 0, len(parts))
+
+	for _, part := range parts {
+		transform := Transform(strings.TrimSpace(part))
+
+		if err := transform.Validate(); err != nil {
+			return nil, fmt.Errorf("failed to parse transform tag for the field %s: %w", fieldName, err)
+		}
+
+		transforms = append(transforms, transform)
+	}
+
+	return transforms, nil
+}
+
+// Transform is a normalization applied to a string field's value after it is
+// populated, whether bound from a request param or decoded from a JSON body.
 type Transform string
 
 func (t Transform) String() string {
@@ -187,13 +244,11 @@ func (f ParamsStructField) Options() (Options, error) {
 
 	parts := strings.Split(value, ",")
 
-	options := Options{
-		Key:    parts[0],
-		Source: Query,
-	}
-
 	if len(parts) == 1 {
-		return options, nil
+		return Options{
+			Key:    parts[0],
+			Source: Query,
+		}, nil
 	}
 
 	source := Source(parts[1])
@@ -202,17 +257,8 @@ func (f ParamsStructField) Options() (Options, error) {
 		return Options{}, fmt.Errorf("failed to parse tag value for the field %s: %w", f.Name, err)
 	}
 
-	options.Source = source
-
-	for _, part := range parts[2:] {
-		transform := Transform(part)
-
-		if err := transform.Validate(); err != nil {
-			return Options{}, fmt.Errorf("failed to parse tag value for the field %s: %w", f.Name, err)
-		}
-
-		options.Transforms = append(options.Transforms, transform)
-	}
-
-	return options, nil
+	return Options{
+		Key:    parts[0],
+		Source: source,
+	}, nil
 }
