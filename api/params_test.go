@@ -107,7 +107,7 @@ func TestParseParamsAppliesTransforms(t *testing.T) {
 			t.Run(source.name+" "+transform.name, func(t *testing.T) {
 				structType := reflect.StructOf([]reflect.StructField{{
 					Name: "Field",
-					Type: reflect.TypeOf(""),
+					Type: reflect.TypeFor[string](),
 					Tag:  reflect.StructTag(fmt.Sprintf(`params:"field,%s" transform:"%s"`, source.name, transform.name)),
 				}})
 
