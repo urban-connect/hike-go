@@ -27,12 +27,18 @@ func ParseParams(r *http.Request, in any) error {
 			value = r.PathValue(options.Key)
 		} else if options.Source.Is(Header) {
 			value = r.Header.Get(options.Key)
+		} else if options.Source.Is(Form) {
+			value = r.PostFormValue(options.Key)
 		} else {
 			value = r.URL.Query().Get(options.Key)
 		}
 
 		if len(value) == 0 {
 			continue
+		}
+
+		for _, transform := range options.Transforms {
+			value = transform.Apply(value)
 		}
 
 		fieldValue := inElem.Field(i)
@@ -87,8 +93,9 @@ func ParseParams(r *http.Request, in any) error {
 
 // Options contains options parsed from tag value
 type Options struct {
-	Key    string
-	Source Source
+	Key        string
+	Source     Source
+	Transforms []Transform
 }
 
 type Source string
@@ -102,7 +109,7 @@ func (s Source) String() string {
 }
 
 func (s Source) Validate() error {
-	if s.Is(Path, Query, Header) {
+	if s.Is(Path, Query, Header, Form) {
 		return nil
 	}
 
@@ -113,6 +120,7 @@ const (
 	Path   Source = "path"
 	Query  Source = "query"
 	Header Source = "header"
+	Form   Source = "form"
 )
 
 var (
@@ -120,6 +128,46 @@ var (
 		Path.String(),
 		Query.String(),
 		Header.String(),
+		Form.String(),
+	}
+)
+
+// Transform is a normalization applied to a parameter's string value after it
+// is read from the request and before it is bound to the target field.
+type Transform string
+
+func (t Transform) String() string {
+	return string(t)
+}
+
+func (t Transform) Apply(value string) string {
+	switch t {
+	case Lowercase:
+		return strings.ToLower(value)
+	case Uppercase:
+		return strings.ToUpper(value)
+	default:
+		return value
+	}
+}
+
+func (t Transform) Validate() error {
+	if slices.Contains(AvailableParamsTransforms, t.String()) {
+		return nil
+	}
+
+	return fmt.Errorf("transform %s should be one of %s", t.String(), strings.Join(AvailableParamsTransforms, ","))
+}
+
+const (
+	Lowercase Transform = "lowercase"
+	Uppercase Transform = "uppercase"
+)
+
+var (
+	AvailableParamsTransforms = []string{
+		Lowercase.String(),
+		Uppercase.String(),
 	}
 )
 
@@ -139,11 +187,13 @@ func (f ParamsStructField) Options() (Options, error) {
 
 	parts := strings.Split(value, ",")
 
+	options := Options{
+		Key:    parts[0],
+		Source: Query,
+	}
+
 	if len(parts) == 1 {
-		return Options{
-			Key:    parts[0],
-			Source: Query,
-		}, nil
+		return options, nil
 	}
 
 	source := Source(parts[1])
@@ -152,8 +202,17 @@ func (f ParamsStructField) Options() (Options, error) {
 		return Options{}, fmt.Errorf("failed to parse tag value for the field %s: %w", f.Name, err)
 	}
 
-	return Options{
-		Key:    parts[0],
-		Source: source,
-	}, nil
+	options.Source = source
+
+	for _, part := range parts[2:] {
+		transform := Transform(part)
+
+		if err := transform.Validate(); err != nil {
+			return Options{}, fmt.Errorf("failed to parse tag value for the field %s: %w", f.Name, err)
+		}
+
+		options.Transforms = append(options.Transforms, transform)
+	}
+
+	return options, nil
 }

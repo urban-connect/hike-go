@@ -84,15 +84,17 @@ err := crypto.NewToken(header).Validate(digest)
 
 ### `api` — request parameter binding
 
-`api.ParseParams` binds request data into a struct via `params:"key,source"` tags, where `source` is
-`path`, `query` (the default), or `header`. Path values use `r.PathValue`, i.e. Go 1.22 `net/http`
-routing patterns.
+`api.ParseParams` binds request data into a struct via `params:"key,source,transforms..."` tags, where
+`source` is `path`, `query` (the default), `header`, or `form`. Path values use `r.PathValue`, i.e. Go
+1.22 `net/http` routing patterns; form values use `r.PostFormValue`. Any parts after the source are
+value transforms applied in order before binding — currently `lowercase` and `uppercase`.
 
 ```go
 type Params struct {
-    ID    string `params:"id,path"`
+    ID    string `params:"id,path,lowercase"`
     Token string `params:"authorization,header"`
     Limit int    `params:"limit,query"`
+    Turn  string `params:"turn,form"`
 }
 
 var params Params

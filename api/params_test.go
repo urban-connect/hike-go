@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,55 @@ func TestParseParamsSources(t *testing.T) {
 	assert.Equal(t, "Bearer secret", p.Token)
 	assert.Equal(t, 10, p.Limit)
 	assert.Equal(t, "widget", p.Name)
+}
+
+func TestParseParamsFormSource(t *testing.T) {
+	type params struct {
+		ID   string `params:"id,form"`
+		Turn string `params:"turn,form"`
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/device/relay/control",
+		strings.NewReader("id=abc123&turn=on"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var p params
+	require.NoError(t, ParseParams(r, &p))
+
+	assert.Equal(t, "abc123", p.ID)
+	assert.Equal(t, "on", p.Turn)
+}
+
+func TestParseParamsTransforms(t *testing.T) {
+	type params struct {
+		Lower string `params:"lower,query,lowercase"`
+		Upper string `params:"upper,query,uppercase"`
+		ID    string `params:"id,path,lowercase"`
+		Plain string `params:"plain,query"`
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/?lower=MixedCase&upper=MixedCase&plain=MixedCase", nil)
+	r.SetPathValue("id", "CC7B5C85C8D8")
+
+	var p params
+	require.NoError(t, ParseParams(r, &p))
+
+	assert.Equal(t, "mixedcase", p.Lower)
+	assert.Equal(t, "MIXEDCASE", p.Upper)
+	assert.Equal(t, "cc7b5c85c8d8", p.ID)
+	assert.Equal(t, "MixedCase", p.Plain) // untransformed
+}
+
+func TestParseParamsRejectsUnknownTransform(t *testing.T) {
+	var p struct {
+		Name string `params:"name,query,titlecase"`
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/?name=x", nil)
+
+	err := ParseParams(r, &p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "transform titlecase")
 }
 
 func TestParseParamsKinds(t *testing.T) {
