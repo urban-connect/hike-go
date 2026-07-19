@@ -22,6 +22,18 @@ func TestApplyTransforms(t *testing.T) {
 		assert.Equal(t, "MixedCase", in.Plain)
 	})
 
+	t.Run("applies a comma-separated list in order", func(t *testing.T) {
+		in := struct {
+			LowerWins string `transform:"uppercase,lowercase"`
+			UpperWins string `transform:"lowercase,uppercase"`
+		}{LowerWins: "MixedCase", UpperWins: "MixedCase"}
+
+		require.NoError(t, ApplyTransforms(&in))
+
+		assert.Equal(t, "mixedcase", in.LowerWins)
+		assert.Equal(t, "MIXEDCASE", in.UpperWins)
+	})
+
 	t.Run("rejects an unknown transform", func(t *testing.T) {
 		in := struct {
 			Name string `transform:"titlecase"`
