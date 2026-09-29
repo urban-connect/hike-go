@@ -1,0 +1,8 @@
+$schema: https://docs.oneleet.com/code-security/oneleetignore.schema.json
+version: 1
+ignores:
+  - ruleIds:
+      - G304
+    pathPatterns:
+      - /config/readers.go
+    reason: FromFile and FromEncryptedFile read the file the calling service names, never a path from remote input
