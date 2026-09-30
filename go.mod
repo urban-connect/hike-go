@@ -1,8 +1,8 @@
 module github.com/urban-connect/hike-go
 
-go 1.25.0
+go 1.26.0
 
-require golang.org/x/crypto v0.52.0
+require golang.org/x/crypto v0.57.0
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

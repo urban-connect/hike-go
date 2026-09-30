@@ -19,8 +19,7 @@ func reflectFields(t *testing.T, in any) map[string]reflect.StructField {
 	inType := reflect.TypeOf(in)
 	fields := make(map[string]reflect.StructField, inType.NumField())
 
-	for i := range inType.NumField() {
-		field := inType.Field(i)
+	for field := range inType.Fields() {
 		fields[field.Name] = field
 	}
 
